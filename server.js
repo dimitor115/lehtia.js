@@ -1,7 +1,3 @@
-/*
-The core of this simple node.js static server is fork of : https://developer.mozilla.org/en-US/docs/Learn/Server-side/Node_server_without_framework
- */
-
 const http = require('http');
 const url = require('url');
 const fs = require('fs');
@@ -27,14 +23,12 @@ http.createServer((req, res) => {
   const pathname = `.${url.parse(req.url).pathname}`;
 
   if (isClientRequestingForFile(pathname)) {
-    fs.access(pathname, err => {
-      if (err) {
+    fileExist(pathname)
+      .then(() => sendFile(res, pathname))
+      .catch(() => {
         res.statusCode = 404;
         res.end(`File ${pathname} not found!`);
-      } else {
-        sendFile(res, pathname, ext);
-      }
-    });
+      })
   } else {
     fs.stat(pathname, (err, stats) => {
       if (err) {
@@ -42,7 +36,10 @@ http.createServer((req, res) => {
         res.end(`Error during processing ${pathname}`)
       } else {
         if (stats.isDirectory()) {
-          sendFile(res, pathname + '/index.html', '.html'); //TODO: checking if index.html exist 
+          fileExist(pathname + '/index.html')
+            .then(() => {
+              sendFile(res, pathname + '/index.html');
+            })
         }
       }
     })
@@ -50,7 +47,20 @@ http.createServer((req, res) => {
 }).listen(parseInt(port));
 console.log(`Server listening on port ${port}`);
 
-function sendFile(res, pathname, ext) {
+function fileExist(pathname) {
+  return new Promise((resolve, reject) => {
+    fs.access(pathname, err => {
+      if (err) {
+        reject(err)
+      } else {
+        resolve(pathname)
+      }
+    });
+  })
+}
+
+function sendFile(res, pathname) {
+  const ext = path.parse(pathname).ext
   fs.readFile(pathname, (err, data) => {
     if (err) {
       res.statusCode = 500;
