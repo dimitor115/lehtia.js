@@ -18,59 +18,57 @@ const map = {
   '.doc': 'application/msword'
 };
 
-http.createServer((req, res) => {
+http.createServer(handleRequest).listen(parseInt(port));
+console.log(`Server listening on port ${port}`);
+
+function handleRequest(req, res) {
   console.log(`${req.method} ${req.url}`);
   const pathname = `.${url.parse(req.url).pathname}`;
 
   if (isClientRequestingForFile(pathname)) {
-    fileExist(pathname)
-      .then(() => sendFile(res, pathname))
-      .catch(() => {
-        res.statusCode = 404;
-        res.end(`File ${pathname} not found!`);
-      })
+    sendFile(res, pathname)
+      .catch(() => sendError(res, pathname))
   } else {
-    fs.stat(pathname, (err, stats) => {
-      if (err) {
-        res.statusCode = 500;
-        res.end(`Error during processing ${pathname}`)
-      } else {
-        if (stats.isDirectory()) {
-          fileExist(pathname + '/index.html')
-            .then(() => {
-              sendFile(res, pathname + '/index.html');
-            })
-        }
-      }
-    })
+    isDirectory(pathname)
+      .then(() => sendFile(res, pathname + '/index.html'))
+      .catch(() => sendError(res, pathname + '/index.html'))
   }
-}).listen(parseInt(port));
-console.log(`Server listening on port ${port}`);
+}
 
-function fileExist(pathname) {
+function isDirectory(pathname) {
   return new Promise((resolve, reject) => {
-    fs.access(pathname, err => {
+    fs.stat(pathname, (err, stats) => {
       if (err) {
         reject(err)
       } else {
-        resolve(pathname)
+        if (stats.isDirectory()) {
+          resolve()
+        } else {
+          reject()
+        }
       }
-    });
+    })
   })
 }
 
+function sendError(res, pathname) {
+  res.statusCode = 404;
+  res.end(`File ${pathname} not found!`);
+}
+
 function sendFile(res, pathname) {
-  const ext = path.parse(pathname).ext
-  fs.readFile(pathname, (err, data) => {
-    if (err) {
-      res.statusCode = 500;
-      res.end(`Error getting the file: ${err}.`);
-    } else {
-      res.setHeader('Content-type', map[ext] || 'text/plain');
-      setCors(res);
-      res.end(data);
-    }
-  });
+  return new Promise((resolve, reject) => {
+    fs.readFile(pathname, (err, data) => {
+      if (err) {
+        reject(err)
+      } else {
+        res.setHeader('Content-type', map[path.parse(pathname).ext] || 'text/plain');
+        setCors(res);
+        res.end(data);
+        resolve()
+      }
+    });
+  })
 }
 
 function setCors(res) {
